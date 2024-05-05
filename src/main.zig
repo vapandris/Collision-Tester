@@ -17,6 +17,16 @@ const Circle = struct {
     velocity: Vector = Vector.ZERO,
     acceleration: Vector = Vector.ZERO,
 
+    pub fn assign(self: *Circle, other: Circle) void {
+        self.*.radius = other.radius;
+        self.*.position.x = other.position.x;
+        self.*.position.y = other.position.y;
+        self.*.velocity.x = other.velocity.x;
+        self.*.velocity.y = other.velocity.y;
+        self.*.acceleration.x = other.acceleration.x;
+        self.*.acceleration.y = other.acceleration.y;
+    }
+
     pub fn draw(self: Circle, comptime drawColor: rl.Color) void {
         // Draw black outline, and fill it with drawColor:
         rl.drawCircle(@intFromFloat(self.position.x), @intFromFloat(self.position.y), @as(f32, self.radius), rl.Color.black);
@@ -136,10 +146,17 @@ pub fn main() anyerror!void {
         }
 
         { // Move cirlces based on velocity: (for now just the player circle)
+            gameState.playerCircle.acceleration.x = -gameState.playerCircle.velocity.x * 0.8;
+            gameState.playerCircle.acceleration.y = -gameState.playerCircle.velocity.y * 0.8;
             gameState.playerCircle.velocity.x += gameState.playerCircle.acceleration.x * rl.getFrameTime();
             gameState.playerCircle.velocity.y += gameState.playerCircle.acceleration.y * rl.getFrameTime();
             gameState.playerCircle.position.x += gameState.playerCircle.velocity.x * rl.getFrameTime();
             gameState.playerCircle.position.y += gameState.playerCircle.velocity.y * rl.getFrameTime();
+
+            if (@fabs(gameState.playerCircle.velocity.x * gameState.playerCircle.velocity.x + gameState.playerCircle.velocity.y * gameState.playerCircle.velocity.y) < 250.0) {
+                gameState.playerCircle.velocity = Vector.ZERO;
+                gameState.playerCircle.acceleration = Vector.ZERO;
+            }
         }
 
         { // Loop around screen
@@ -183,6 +200,8 @@ pub fn main() anyerror!void {
                     }
                 }
             }
+
+            Circle.assign(&gameState.playerCircle, gameState.otherCirlces.items[gameState.otherCirlces.items.len - 1]);
         }
 
         rl.beginDrawing();
