@@ -31,13 +31,24 @@ const Circle = struct {
         return distanceSquare < radiusSquare;
     }
 
-    fn isCircleCircleOverlapping(circle1: Circle, circle2: Circle) bool {
+    pub fn isCircleCircleOverlapping(circle1: Circle, circle2: Circle) bool {
         // A circle and another circle is overlapping when the distance between them is less than the sum of their radious.
         // For this we can use pythagoras theorem. To avoid taking the square root of the two, we can just compare the square values.
         const distanceSquare = @fabs((circle1.position.x - circle2.position.x) * (circle1.position.x - circle2.position.x) + (circle1.position.y - circle2.position.y) * (circle1.position.y - circle2.position.y));
         const radiousSumSquare = (circle1.radius + circle2.radius) * (circle1.radius + circle2.radius);
 
         return distanceSquare < radiousSumSquare;
+    }
+
+    // This shouldn't be inside Circle, but doesn't matter
+    pub fn loopAround(self: *Circle, screenWidth: u32, screenHeight: u32) void {
+        const h: f32 = @floatFromInt(screenHeight);
+        const w: f32 = @floatFromInt(screenWidth);
+
+        if (self.*.position.x < 0) self.*.position.x += w;
+        if (self.*.position.x >= w) self.*.position.x -= w;
+        if (self.*.position.y < 0) self.*.position.y += h;
+        if (self.*.position.y >= h) self.*.position.y -= h;
     }
 };
 
@@ -129,6 +140,15 @@ pub fn main() anyerror!void {
             gameState.playerCircle.velocity.y += gameState.playerCircle.acceleration.y * rl.getFrameTime();
             gameState.playerCircle.position.x += gameState.playerCircle.velocity.x * rl.getFrameTime();
             gameState.playerCircle.position.y += gameState.playerCircle.velocity.y * rl.getFrameTime();
+        }
+
+        { // Loop around screen
+            for (gameState.otherCirlces.items) |*circle| {
+                circle.loopAround(screenWidth, screenHeight);
+            }
+
+            var playerCircle: *Circle = &gameState.playerCircle;
+            playerCircle.loopAround(screenWidth, screenHeight);
         }
 
         { // Resolve collisions:
