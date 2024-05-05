@@ -71,8 +71,7 @@ const CirclePairArrayList = std.ArrayList(CirclePair);
 
 var gameState: struct {
     isPlayerClickedOn: bool = false,
-    playerCircle: Circle,
-    otherCirlces: CircleArrayList,
+    circles: CircleArrayList,
 } = undefined;
 
 pub fn main() anyerror!void {
@@ -86,15 +85,17 @@ pub fn main() anyerror!void {
 
     rl.setTargetFPS(60); // Set our game to run at 60 frames-per-second
 
-    gameState.playerCircle = Circle{
-        .position = Vector{ .x = screenWidth / 2, .y = screenHeight / 2 },
-        .radius = 64,
-    };
-    gameState.otherCirlces = CircleArrayList.init(std.heap.c_allocator);
-    defer gameState.otherCirlces.deinit();
+    gameState.circles = CircleArrayList.init(std.heap.c_allocator);
+    defer gameState.circles.deinit();
 
     var collidingCircles = CirclePairArrayList.init(std.heap.c_allocator);
     defer collidingCircles.deinit();
+
+    // Append playerCircle at the front of the array:
+    try gameState.circles.append(Circle{
+        .position = Vector{ .x = screenWidth / 2, .y = screenHeight / 2 },
+        .radius = 64,
+    });
 
     // Generate 20 circles randomly:
     for (0..20) |_| {
@@ -103,7 +104,7 @@ pub fn main() anyerror!void {
         const minY = 0;
         const maxY = screenHeight;
         const randomRadius: f32 = @floatFromInt(std.crypto.random.intRangeAtMost(u32, 10, 100));
-        try gameState.otherCirlces.append(Circle{
+        try gameState.circles.append(Circle{
             .position = .{
                 .x = @floatFromInt(std.crypto.random.intRangeAtMost(u32, minX, maxX)),
                 .y = @floatFromInt(std.crypto.random.intRangeAtMost(u32, minY, maxY)),
@@ -112,6 +113,9 @@ pub fn main() anyerror!void {
         });
     }
 
+    // This assumes that the array does not get re-allocated !!!
+    var playerCircle: *Circle = &gameState.circles.items[0];
+
     // Main game loop
     while (!rl.windowShouldClose()) { // Detect window close button or ESC key
         { // Handle mouse input:
@@ -119,7 +123,7 @@ pub fn main() anyerror!void {
                 const location = rl.getMousePosition();
                 const locationVector = Vector{ .x = location.x, .y = location.y };
 
-                if (gameState.playerCircle.isCirclePointOverlapping(locationVector)) {
+                if (playerCircle.*.isCirclePointOverlapping(locationVector)) {
                     gameState.isPlayerClickedOn = true;
                 }
             }
@@ -131,53 +135,48 @@ pub fn main() anyerror!void {
                 gameState.isPlayerClickedOn = false;
 
                 const mouseLocation = rl.getMousePosition();
-                gameState.playerCircle.velocity.x = 1.0 * ((gameState.playerCircle.position.x) - mouseLocation.x);
-                gameState.playerCircle.velocity.y = 1.0 * ((gameState.playerCircle.position.y) - mouseLocation.y);
+                playerCircle.*.velocity.x = 1.0 * ((playerCircle.*.position.x) - mouseLocation.x);
+                playerCircle.*.velocity.y = 1.0 * ((playerCircle.*.position.y) - mouseLocation.y);
             }
 
             if (gameState.isPlayerClickedOn == true) {
                 if (rl.isMouseButtonDown(.mouse_button_left)) {
                     const mouseLocation = rl.getMousePosition();
 
-                    gameState.playerCircle.position.x = mouseLocation.x;
-                    gameState.playerCircle.position.y = mouseLocation.y;
+                    playerCircle.*.position.x = mouseLocation.x;
+                    playerCircle.*.position.y = mouseLocation.y;
                 }
             }
         }
 
         { // Move cirlces based on velocity: (for now just the player circle)
-            gameState.playerCircle.acceleration.x = -gameState.playerCircle.velocity.x * 0.8;
-            gameState.playerCircle.acceleration.y = -gameState.playerCircle.velocity.y * 0.8;
-            gameState.playerCircle.velocity.x += gameState.playerCircle.acceleration.x * rl.getFrameTime();
-            gameState.playerCircle.velocity.y += gameState.playerCircle.acceleration.y * rl.getFrameTime();
-            gameState.playerCircle.position.x += gameState.playerCircle.velocity.x * rl.getFrameTime();
-            gameState.playerCircle.position.y += gameState.playerCircle.velocity.y * rl.getFrameTime();
+            playerCircle.*.acceleration.x = -playerCircle.*.velocity.x * 0.8;
+            playerCircle.*.acceleration.y = -playerCircle.*.velocity.y * 0.8;
+            playerCircle.*.velocity.x += playerCircle.*.acceleration.x * rl.getFrameTime();
+            playerCircle.*.velocity.y += playerCircle.*.acceleration.y * rl.getFrameTime();
+            playerCircle.*.position.x += playerCircle.*.velocity.x * rl.getFrameTime();
+            playerCircle.*.position.y += playerCircle.*.velocity.y * rl.getFrameTime();
 
-            if (@fabs(gameState.playerCircle.velocity.x * gameState.playerCircle.velocity.x + gameState.playerCircle.velocity.y * gameState.playerCircle.velocity.y) < 250.0) {
-                gameState.playerCircle.velocity = Vector.ZERO;
-                gameState.playerCircle.acceleration = Vector.ZERO;
+            if (@fabs(playerCircle.*.velocity.x * playerCircle.*.velocity.x + playerCircle.*.velocity.y * playerCircle.*.velocity.y) < 250.0) {
+                playerCircle.*.velocity = Vector.ZERO;
+                playerCircle.*.acceleration = Vector.ZERO;
             }
         }
 
         { // Loop around screen
-            for (gameState.otherCirlces.items) |*circle| {
+            for (gameState.circles.items) |*circle| {
                 circle.loopAround(screenWidth, screenHeight);
             }
 
-            var playerCircle: *Circle = &gameState.playerCircle;
             playerCircle.loopAround(screenWidth, screenHeight);
         }
 
         { // Resolve collisions:
-            // Temporairly append the palyerCircle to the array so it doesn't have to be handled seperatelly:
-            try gameState.otherCirlces.append(gameState.playerCircle);
-            defer gameState.otherCirlces.items.len -= 1;
-
             // Reset the colliding circles array:
             collidingCircles.items.len = 0;
 
-            for (gameState.otherCirlces.items, 0..) |*circle, i| {
-                for (gameState.otherCirlces.items, 0..) |*otherCircle, j| {
+            for (gameState.circles.items, 0..) |*circle, i| {
+                for (gameState.circles.items, 0..) |*otherCircle, j| {
                     if (i == j) continue;
 
                     if (Circle.isCircleCircleOverlapping(circle.*, otherCircle.*) == true) {
@@ -200,8 +199,6 @@ pub fn main() anyerror!void {
                     }
                 }
             }
-
-            Circle.assign(&gameState.playerCircle, gameState.otherCirlces.items[gameState.otherCirlces.items.len - 1]);
         }
 
         rl.beginDrawing();
@@ -209,14 +206,15 @@ pub fn main() anyerror!void {
 
         rl.clearBackground(rl.Color.dark_gray);
 
-        for (gameState.otherCirlces.items) |circle| {
-            circle.draw(rl.Color.blue);
+        var i: u32 = 1;
+        while (i < gameState.circles.items.len) : (i += 1) {
+            gameState.circles.items[i].draw(rl.Color.blue);
         }
 
-        gameState.playerCircle.draw(rl.Color.green);
+        playerCircle.*.draw(rl.Color.green);
         if (rl.isMouseButtonDown(.mouse_button_right)) {
             const location = rl.getMousePosition();
-            const p = gameState.playerCircle.position;
+            const p = playerCircle.*.position;
 
             rl.drawLineEx(rl.Vector2{ .x = p.x, .y = p.y }, location, 2.0, rl.Color.red);
         }
