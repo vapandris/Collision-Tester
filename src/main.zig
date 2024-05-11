@@ -17,6 +17,10 @@ const Circle = struct {
     velocity: Vector = Vector.ZERO,
     acceleration: Vector = Vector.ZERO,
 
+    pub fn mass(self: Circle) f32 {
+        return self.radius * 10;
+    }
+
     pub fn assign(self: *Circle, other: Circle) void {
         self.*.radius = other.radius;
         self.*.position.x = other.position.x;
@@ -63,8 +67,8 @@ const Circle = struct {
 };
 
 const CirclePair = struct {
-    first: Circle,
-    second: Circle,
+    first: *Circle,
+    second: *Circle,
 };
 const CircleArrayList = std.ArrayList(Circle);
 const CirclePairArrayList = std.ArrayList(CirclePair);
@@ -135,8 +139,8 @@ pub fn main() anyerror!void {
                 gameState.isPlayerClickedOn = false;
 
                 const mouseLocation = rl.getMousePosition();
-                playerCircle.*.velocity.x = 1.0 * ((playerCircle.*.position.x) - mouseLocation.x);
-                playerCircle.*.velocity.y = 1.0 * ((playerCircle.*.position.y) - mouseLocation.y);
+                playerCircle.*.velocity.x = 2.0 * ((playerCircle.*.position.x) - mouseLocation.x);
+                playerCircle.*.velocity.y = 2.0 * ((playerCircle.*.position.y) - mouseLocation.y);
             }
 
             if (gameState.isPlayerClickedOn == true) {
@@ -193,11 +197,38 @@ pub fn main() anyerror!void {
                         otherCircle.*.position.y += overlap - ((p1.y - p2.y) / distance);
 
                         try collidingCircles.append(CirclePair{
-                            .first = circle.*,
-                            .second = otherCircle.*,
+                            .first = circle,
+                            .second = otherCircle,
                         });
                     }
                 }
+            }
+
+            for (collidingCircles.items) |circlePair| {
+                var c1: *Circle = circlePair.first;
+                var c2: *Circle = circlePair.second;
+
+                const distance: f32 = @sqrt((c1.*.position.x - c2.*.position.x) * (c1.*.position.x - c2.*.position.x) + (c1.*.position.y - c2.*.position.y) * (c1.*.position.y - c2.*.position.y));
+
+                const normalX: f32 = (c2.*.position.x - c1.*.position.x) / distance;
+                const normalY: f32 = (c2.*.position.y - c1.*.position.y) / distance;
+                const tangentX: f32 = -normalY;
+                const tangentY: f32 = normalX;
+
+                // Calcualte how much momentum gets transfered to the tangent and normal vectors:
+                const dotProductTangentC1: f32 = (c1.*.velocity.x * tangentX) + (c1.*.velocity.y * tangentY);
+                const dotProductTangentC2: f32 = (c2.*.velocity.x * tangentX) + (c2.*.velocity.y * tangentY);
+                const dotProductNormalC1: f32 = (c1.*.velocity.x * normalX) + (c1.*.velocity.y * normalY);
+                const dotProductNormalC2: f32 = (c2.*.velocity.x * normalX) + (c2.*.velocity.y * normalY);
+
+                const momentumConversationC1 = (dotProductNormalC1 * (c1.*.mass() - c2.*.mass()) + (2.0 * c2.*.mass() * dotProductNormalC2)) / (c1.*.mass() + c2.*.mass());
+                const momentumConversationC2 = (dotProductNormalC2 * (c2.*.mass() - c1.*.mass()) + (2.0 * c1.*.mass() * dotProductNormalC1)) / (c1.*.mass() + c2.*.mass());
+
+                // Update velocities based on the transfered energy/velocity:
+                c1.*.velocity.x = (tangentX * dotProductTangentC1) + (normalX * momentumConversationC1);
+                c1.*.velocity.y = (tangentY * dotProductTangentC1) + (normalY * momentumConversationC1);
+                c2.*.velocity.x = (tangentX * dotProductTangentC2) + (normalX * momentumConversationC2);
+                c2.*.velocity.y = (tangentY * dotProductTangentC2) + (normalY * momentumConversationC2);
             }
         }
 
@@ -220,8 +251,8 @@ pub fn main() anyerror!void {
         }
 
         for (collidingCircles.items) |pair| {
-            const p1 = pair.first.position;
-            const p2 = pair.second.position;
+            const p1 = pair.first.*.position;
+            const p2 = pair.second.*.position;
 
             rl.drawLineEx(rl.Vector2{ .x = p1.x, .y = p1.y }, rl.Vector2{ .x = p2.x, .y = p2.y }, 2.0, rl.Color.red);
         }
