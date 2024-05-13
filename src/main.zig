@@ -98,7 +98,7 @@ pub fn main() anyerror!void {
     // Append playerCircle at the front of the array:
     try gameState.circles.append(Circle{
         .position = Vector{ .x = screenWidth / 2, .y = screenHeight / 2 },
-        .radius = 64,
+        .radius = 10,
     });
 
     // Generate 20 circles randomly:
@@ -208,27 +208,22 @@ pub fn main() anyerror!void {
                 var c1: *Circle = circlePair.first;
                 var c2: *Circle = circlePair.second;
 
+                // Optimised wiki version:
                 const distance: f32 = @sqrt((c1.*.position.x - c2.*.position.x) * (c1.*.position.x - c2.*.position.x) + (c1.*.position.y - c2.*.position.y) * (c1.*.position.y - c2.*.position.y));
 
-                const normalX: f32 = (c2.*.position.x - c1.*.position.x) / distance;
-                const normalY: f32 = (c2.*.position.y - c1.*.position.y) / distance;
-                const tangentX: f32 = -normalY;
-                const tangentY: f32 = normalX;
+                const nx: f32 = (c2.*.position.x - c1.*.position.x) / distance;
+                const ny: f32 = (c2.*.position.y - c1.*.position.y) / distance;
+                //const tx: f32 = -ny;
+                //const ty: f32 = nx;
 
-                // Calcualte how much momentum gets transfered to the tangent and normal vectors:
-                const dotProductTangentC1: f32 = (c1.*.velocity.x * tangentX) + (c1.*.velocity.y * tangentY);
-                const dotProductTangentC2: f32 = (c2.*.velocity.x * tangentX) + (c2.*.velocity.y * tangentY);
-                const dotProductNormalC1: f32 = (c1.*.velocity.x * normalX) + (c1.*.velocity.y * normalY);
-                const dotProductNormalC2: f32 = (c2.*.velocity.x * normalX) + (c2.*.velocity.y * normalY);
+                const kx: f32 = (c1.velocity.x - c2.velocity.x);
+                const ky: f32 = (c1.velocity.y - c2.velocity.y);
+                const p: f32 = 2 * (nx * kx + ny * ky) / (c1.mass() + c2.mass());
 
-                const momentumConversationC1 = (dotProductNormalC1 * (c1.*.mass() - c2.*.mass()) + (2.0 * c2.*.mass() * dotProductNormalC2)) / (c1.*.mass() + c2.*.mass());
-                const momentumConversationC2 = (dotProductNormalC2 * (c2.*.mass() - c1.*.mass()) + (2.0 * c1.*.mass() * dotProductNormalC1)) / (c1.*.mass() + c2.*.mass());
-
-                // Update velocities based on the transfered energy/velocity:
-                c1.*.velocity.x = (tangentX * dotProductTangentC1) + (normalX * momentumConversationC1);
-                c1.*.velocity.y = (tangentY * dotProductTangentC1) + (normalY * momentumConversationC1);
-                c2.*.velocity.x = (tangentX * dotProductTangentC2) + (normalX * momentumConversationC2);
-                c2.*.velocity.y = (tangentY * dotProductTangentC2) + (normalY * momentumConversationC2);
+                c1.*.velocity.x -= p * c2.mass() * nx;
+                c1.*.velocity.y -= p * c2.mass() * ny;
+                c2.*.velocity.x += p * c1.mass() * nx;
+                c2.*.velocity.y += p * c1.mass() * ny;
             }
         }
 
