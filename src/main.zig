@@ -66,9 +66,12 @@ const Circle = struct {
     }
 };
 
+// Store a pair of circles and their identifying indexes to avoid putting the same pair into the array but in flipped order
 const CirclePair = struct {
     first: *Circle,
+    firstIndex: usize,
     second: *Circle,
+    secondIndex: usize,
 };
 const CircleArrayList = std.ArrayList(Circle);
 const CirclePairArrayList = std.ArrayList(CirclePair);
@@ -98,7 +101,7 @@ pub fn main() anyerror!void {
     // Append playerCircle at the front of the array:
     try gameState.circles.append(Circle{
         .position = Vector{ .x = screenWidth / 2, .y = screenHeight / 2 },
-        .radius = 10,
+        .radius = 40,
     });
 
     // Generate 20 circles randomly:
@@ -153,17 +156,17 @@ pub fn main() anyerror!void {
             }
         }
 
-        { // Move cirlces based on velocity: (for now just the player circle)
-            playerCircle.*.acceleration.x = -playerCircle.*.velocity.x * 0.8;
-            playerCircle.*.acceleration.y = -playerCircle.*.velocity.y * 0.8;
-            playerCircle.*.velocity.x += playerCircle.*.acceleration.x * rl.getFrameTime();
-            playerCircle.*.velocity.y += playerCircle.*.acceleration.y * rl.getFrameTime();
-            playerCircle.*.position.x += playerCircle.*.velocity.x * rl.getFrameTime();
-            playerCircle.*.position.y += playerCircle.*.velocity.y * rl.getFrameTime();
+        for (gameState.circles.items) |*circle| { // Move cirlces based on velocity: (for now just the player circle)
+            circle.*.acceleration.x = -circle.velocity.x * 0.8;
+            circle.*.acceleration.y = -circle.velocity.y * 0.8;
+            circle.*.velocity.x += circle.acceleration.x * rl.getFrameTime();
+            circle.*.velocity.y += circle.acceleration.y * rl.getFrameTime();
+            circle.*.position.x += circle.velocity.x * rl.getFrameTime();
+            circle.*.position.y += circle.velocity.y * rl.getFrameTime();
 
-            if (@fabs(playerCircle.*.velocity.x * playerCircle.*.velocity.x + playerCircle.*.velocity.y * playerCircle.*.velocity.y) < 250.0) {
-                playerCircle.*.velocity = Vector.ZERO;
-                playerCircle.*.acceleration = Vector.ZERO;
+            if (@fabs(circle.velocity.x * circle.velocity.x + circle.velocity.y * circle.velocity.y) < 250.0) {
+                circle.*.velocity = Vector.ZERO;
+                circle.*.acceleration = Vector.ZERO;
             }
         }
 
@@ -183,21 +186,36 @@ pub fn main() anyerror!void {
                 for (gameState.circles.items, 0..) |*otherCircle, j| {
                     if (i == j) continue;
 
+                    var alreadyHandeled: bool = false;
+                    for (collidingCircles.items) |circlePair| {
+                        if (circlePair.secondIndex == i) {
+                            alreadyHandeled = true;
+                            break;
+                        }
+                    }
+
+                    if (alreadyHandeled) continue;
+
                     if (Circle.isCircleCircleOverlapping(circle.*, otherCircle.*) == true) {
                         const p1 = circle.*.position;
                         const p2 = otherCircle.*.position;
                         const distance = @sqrt((p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y));
                         const overlap = 0.5 * (distance - circle.radius - otherCircle.radius);
 
-                        // Displace the circles:
-                        circle.*.position.x -= overlap - ((p1.x - p2.x) / distance);
-                        circle.*.position.y -= overlap - ((p1.y - p2.y) / distance);
+                        const displaceDirectionX: f32 = (p1.x - p2.x) / distance;
+                        const displaceDirectionY: f32 = (p1.y - p2.y) / distance;
 
-                        otherCircle.*.position.x += overlap - ((p1.x - p2.x) / distance);
-                        otherCircle.*.position.y += overlap - ((p1.y - p2.y) / distance);
+                        // Displace the circles:
+                        circle.*.position.x -= overlap * displaceDirectionX;
+                        circle.*.position.y -= overlap * displaceDirectionY;
+
+                        otherCircle.*.position.x += overlap * displaceDirectionX;
+                        otherCircle.*.position.y += overlap * displaceDirectionY;
 
                         try collidingCircles.append(CirclePair{
+                            .firstIndex = i,
                             .first = circle,
+                            .secondIndex = j,
                             .second = otherCircle,
                         });
                     }
@@ -213,12 +231,10 @@ pub fn main() anyerror!void {
 
                 const nx: f32 = (c2.*.position.x - c1.*.position.x) / distance;
                 const ny: f32 = (c2.*.position.y - c1.*.position.y) / distance;
-                //const tx: f32 = -ny;
-                //const ty: f32 = nx;
 
                 const kx: f32 = (c1.velocity.x - c2.velocity.x);
                 const ky: f32 = (c1.velocity.y - c2.velocity.y);
-                const p: f32 = 2 * (nx * kx + ny * ky) / (c1.mass() + c2.mass());
+                const p: f32 = 2 * ((nx * kx + ny * ky) / (c1.mass() + c2.mass()));
 
                 c1.*.velocity.x -= p * c2.mass() * nx;
                 c1.*.velocity.y -= p * c2.mass() * ny;
